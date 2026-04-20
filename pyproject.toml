@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "target-airbase"
+version = "0.1.0"
+description = "`target-airbase` is a Singer target for airbase, built with the Meltano SDK for Singer Targets."
+authors = ["hotglue"]
+keywords = [
+    "ELT",
+    "airbase",
+]
+license = "Apache 2.0"
+
+[tool.poetry.dependencies]
+python = "<3.11,>=3.7.1"
+requests = "^2.25.1"
+hotglue-singer-sdk = "^1.0.11"
+hotglue-models-accounting = { git = "https://gitlab.com/hotglue/hotglue-models-accounting.git", rev = "v2" }
+
+[build-system]
+requires = ["poetry-core==1.0.8"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+# CLI declaration
+target-airbase = 'target_airbase.target:TargetAirbase.cli'
