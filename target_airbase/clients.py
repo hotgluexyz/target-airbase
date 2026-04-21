@@ -32,25 +32,28 @@ class AirbaseSink(HotglueSink):
             self._target.reference_data["currencies"] = currencies
         return self._target.reference_data["currencies"]
 
-    def get_subsidiary(self, subsidiary_number: str) -> dict:
-        subsidiary = next(
-            (
-                s
-                for s in self.subsidiaries
-                if s.get("erp_reference_id") == subsidiary_number
-            ),
-            None,
-        )
+    def get_subsidiary(self, subsidiary_ref: str) -> dict:
+        mapped_subsidiaries = []
+        for sub in subsidiary_ref:
+            subsidiary = next(
+                (
+                    s
+                    for s in self.subsidiaries
+                    if s.get("erp_reference_id") == sub.get("subsidiaryNumber")
+                ),
+                None,
+            )
 
-        if not subsidiary:
-            raise ValueError(f"Subsidiary {subsidiary_number} not found")
+            if not subsidiary:
+                raise ValueError(f"Subsidiary {sub.get('subsidiaryNumber')} not found")
 
-        return [
-            {
-                "airbase_id": subsidiary.get("airbase_id"),
-                "erp_reference_id": subsidiary.get("erp_reference_id"),
-            }
-        ]
+            mapped_subsidiaries.append(
+                {
+                    "airbase_id": subsidiary.get("airbase_id"),
+                    "erp_reference_id": subsidiary.get("erp_reference_id"),
+                }
+            )
+        return mapped_subsidiaries
 
     def get_currency(self, currency: str) -> dict:
         currency = next(
@@ -70,8 +73,11 @@ class AirbaseSink(HotglueSink):
         method = "POST"
 
         if is_update:
-            endpoint = f"/{self.endpoint}/{record_id}"
+            endpoint = f"{self.endpoint}{record_id}/"
             method = "PATCH"
+
+            # erp_reference_id can't be updated
+            record.pop("erp_reference_id", None)
 
         response = self.request_api(method, endpoint, request_data=record)
         id = response.json().get("airbase_id")

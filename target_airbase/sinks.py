@@ -9,6 +9,7 @@ class AccountsSink(AirbaseSink):
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         payload: dict = {
+            "id": record.get("id"),
             "name": record.get("name"),
             "erp_reference_id": record.get("accountNumber"),
             "type": record.get("type"),
@@ -16,7 +17,7 @@ class AccountsSink(AirbaseSink):
             "erp_currency_reference_id": record.get("currency"),  # iso code symbol
             "account_number": record.get("accountNumber")
         }
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryNumber"))
+        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
         payload["erp_currency_reference_id"] = self.get_currency(record.get("currency"))
 
         return payload
@@ -31,9 +32,10 @@ class SuppliersSink(AirbaseSink):
         payload: dict = {
             "name": record.get("vendorName"),
             "erp_reference_id": record.get("vendorNumber"),
+            "id": record.get("id"),
         }
 
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryNumber"))
+        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
         return payload
 
 
@@ -46,6 +48,7 @@ class SubsidiariesSink(AirbaseSink):
         payload: dict = {
             "erp_reference_id": record.get("subsidiaryNumber"),
             "name": record.get("name"),
+            "id": record.get("id"),
         }
         payload["erp_currency_reference_id"] = self.get_currency(record.get("currency"))
         country = record.get("addresses")[0].get("country") if record.get("addresses") else None
