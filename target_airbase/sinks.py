@@ -14,7 +14,6 @@ class AccountsSink(AirbaseSink):
             "erp_reference_id": record.get("accountNumber"),
             "type": record.get("type"),
             "category": record.get("category") or "",
-            "erp_currency_reference_id": record.get("currency"),  # iso code symbol
             "account_number": record.get("accountNumber")
         }
         payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
