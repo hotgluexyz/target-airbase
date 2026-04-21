@@ -40,10 +40,7 @@ def notify_entity_sync_complete(config: dict) -> None:
         timeout=300,
     )
 
-    response_json = response.json()
-
-    if response.status_code == 404 and response_json.get("detail") == "No active sync session found.":
+    if response.status_code == 404 and response.json().get("detail") == "No active sync session found.":
         LOGGER.info("GL onboarding is already completed. Skipping entity sync complete.")
         return
-
     response.raise_for_status()
