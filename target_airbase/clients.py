@@ -39,7 +39,7 @@ class AirbaseSink(HotglueSink):
                 (
                     s
                     for s in self.subsidiaries
-                    if s.get("erp_reference_id") == sub.get("subsidiaryNumber")
+                    if s.get("name") == sub.get("subsidiaryName")
                 ),
                 None,
             )
