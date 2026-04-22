@@ -16,21 +16,45 @@ class AirbaseSink(HotglueSink):
             "Content-Type": "application/json",
         }
 
+    def get_data(self, endpoint: str) -> list[dict]:
+        params = {"page": 1, "page_size": 250}
+        data = []
+        while True:
+            response = self.request_api("GET", endpoint, params=params)
+            data.extend(response.json().get("data", []))
+            if response.json().get("next") is not None:
+                params["page"] += 1
+            else:
+                break
+        return data
+
     @property
     def subsidiaries(self) -> list[dict]:
         if self._target.reference_data.get("subsidiaries") is None:
-            response = self.request_api("GET", "/subsidiaries")
-            subsidiaries = response.json().get("data", [])
+            subsidiaries = self.get_data("/subsidiaries/")
             self._target.reference_data["subsidiaries"] = subsidiaries
         return self._target.reference_data["subsidiaries"]
     
     @property
     def currencies(self) -> list[dict]:
         if self._target.reference_data.get("currencies") is None:
-            response = self.request_api("GET", "/currencies")
-            currencies = response.json().get("data", [])
+            currencies = self.get_data("/currencies/")
             self._target.reference_data["currencies"] = currencies
         return self._target.reference_data["currencies"]
+    
+
+    @property
+    def vendors(self) -> list[dict]:
+        if self._target.reference_data.get("vendors") is None:
+            response = self.request_api("GET", "/vendors")
+            vendors = response.json().get("data", [])
+            # keep only name and erp_reference_id
+            vendors = [{
+                "name": v.get("name"),
+                "erp_reference_id": v.get("erp_reference_id"),
+            } for v in vendors]
+            self._target.reference_data["vendors"] = vendors
+        return self._target.reference_data["vendors"]
 
     def get_subsidiary(self, subsidiary_ref: str) -> dict:
         mapped_subsidiaries = []
