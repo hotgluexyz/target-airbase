@@ -38,7 +38,7 @@ class SuppliersSink(AirbaseSink):
         if not payload["id"]:
             vendor = next((v for v in self.vendors if v.get("erp_reference_id") == record.get("vendorNumber") and v.get("name") == record.get("vendorName")), None)
             if vendor:
-                payload["id"] = vendor.get("id")
+                payload["id"] = vendor.get("airbase_id")
 
         payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
         return payload

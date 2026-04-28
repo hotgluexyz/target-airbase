@@ -50,6 +50,7 @@ class AirbaseSink(HotglueSink):
             vendors = response.json().get("data", [])
             # keep only name and erp_reference_id
             vendors = [{
+                "airbase_id": v.get("airbase_id"),
                 "name": v.get("name"),
                 "erp_reference_id": v.get("erp_reference_id"),
             } for v in vendors]
