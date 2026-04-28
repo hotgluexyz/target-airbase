@@ -46,15 +46,12 @@ class AirbaseSink(HotglueSink):
     @property
     def vendors(self) -> list[dict]:
         if self._target.reference_data.get("vendors") is None:
-            response = self.request_api("GET", "/vendors")
-            vendors = response.json().get("data", [])
-            # keep only name and erp_reference_id
-            vendors = [{
+            vendors = self.get_data("/vendors/")
+            self._target.reference_data["vendors"] = [{
                 "airbase_id": v.get("airbase_id"),
                 "name": v.get("name"),
                 "erp_reference_id": v.get("erp_reference_id"),
             } for v in vendors]
-            self._target.reference_data["vendors"] = vendors
         return self._target.reference_data["vendors"]
 
     def get_subsidiary(self, subsidiary_ref: str) -> dict:
