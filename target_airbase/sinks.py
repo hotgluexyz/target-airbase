@@ -72,3 +72,29 @@ class CurrenciesSink(AirbaseSink):
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         return record
+
+
+class LedgerEntriesSink(AirbaseSink):
+    name = "LedgerEntries"
+    endpoint = "/ledger_entries/"  # used to update bills (no POST endpoint available)
+
+    def preprocess_record(self, record: dict, context: dict) -> dict:
+        return record
+    
+
+    def upsert_record(self, record: dict, context: dict):
+        state_updates = {}
+
+        # check if the bill is already marked as sync_complete
+        record_id = record.pop("id", None)
+
+        if not record_id:
+            raise ValueError("Record ID is required to update a bill")
+        
+        response = self.request_api("GET", f"{self.endpoint}{record_id}/")
+        res_json = response.json()
+        if res_json.get("status") == "sync_complete":
+            return record_id, True, {"existing": True}
+        
+        response = self.request_api("PATCH", f"{self.endpoint}{record_id}/", request_data=record)
+        return record_id, response.ok, state_updates
