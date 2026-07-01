@@ -110,3 +110,5 @@ class AirbaseSink(HotglueSink):
 
         return id, response.ok, state_updates
     
+    def preprocess_record(self, record: dict, context: dict) -> dict:
+        return record

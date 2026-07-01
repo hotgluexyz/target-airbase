@@ -70,17 +70,10 @@ class CurrenciesSink(AirbaseSink):
     name = "Currencies"
     endpoint = "/currencies/"
 
-    def preprocess_record(self, record: dict, context: dict) -> dict:
-        return record
-
 
 class LedgerEntriesSink(AirbaseSink):
     name = "LedgerEntries"
     endpoint = "/ledger_entries/"  # used to update bills (no POST endpoint available)
-
-    def preprocess_record(self, record: dict, context: dict) -> dict:
-        return record
-    
 
     def upsert_record(self, record: dict, context: dict):
         state_updates = {}
@@ -98,3 +91,8 @@ class LedgerEntriesSink(AirbaseSink):
         
         response = self.request_api("PATCH", f"{self.endpoint}{record_id}/", request_data=record)
         return record_id, response.ok, state_updates
+
+
+class TagsSink(AirbaseSink):
+    name = "Tags"
+    endpoint = "/tags/"

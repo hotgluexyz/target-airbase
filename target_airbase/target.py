@@ -5,8 +5,18 @@ from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.sinks import Sink
 from hotglue_singer_sdk.target_sdk.target import TargetHotglue
 
-from target_airbase.sync_session_helpers import notify_entity_sync_complete, notify_entity_sync_start
-from target_airbase.sinks import AccountsSink, SuppliersSink, SubsidiariesSink, CurrenciesSink, LedgerEntriesSink
+from target_airbase.sync_session_helpers import (
+    notify_entity_sync_complete,
+    notify_entity_sync_start,
+)
+from target_airbase.sinks import (
+    AccountsSink,
+    SuppliersSink,
+    SubsidiariesSink,
+    CurrenciesSink,
+    LedgerEntriesSink,
+    TagsSink,
+)
 
 
 class TargetAirbase(TargetHotglue):
@@ -19,7 +29,14 @@ class TargetAirbase(TargetHotglue):
         th.Property("api_key", th.StringType, required=True),
     ).to_dict()
 
-    SINK_TYPES = [AccountsSink, SuppliersSink, SubsidiariesSink, CurrenciesSink, LedgerEntriesSink]
+    SINK_TYPES = [
+        AccountsSink,
+        SuppliersSink,
+        SubsidiariesSink,
+        CurrenciesSink,
+        LedgerEntriesSink,
+        TagsSink,
+    ]
 
     def listen(self, file_input=None):
         notify_entity_sync_start(dict(self.config))
