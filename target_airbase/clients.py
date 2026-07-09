@@ -57,17 +57,28 @@ class AirbaseSink(HotglueSink):
     def get_subsidiary(self, subsidiary_ref: str) -> dict:
         mapped_subsidiaries = []
         for sub in subsidiary_ref:
-            subsidiary = next(
-                (
-                    s
-                    for s in self.subsidiaries
-                    if s.get("name") == sub.get("subsidiaryName")
-                ),
-                None,
-            )
+            subsidiary = None
+            if sub.get("id"):
+                subsidiary = next(
+                    (
+                        s
+                        for s in self.subsidiaries
+                        if s.get("airbase_id") == sub.get("id")
+                    ),
+                    None
+                )
+            if not subsidiary and sub.get("name"):
+                subsidiary = next(
+                    (
+                        s
+                        for s in self.subsidiaries
+                        if s.get("name") == sub.get("name")
+                    ),
+                    None,
+                )
 
             if not subsidiary:
-                raise ValueError(f"Subsidiary {sub.get('subsidiaryNumber')} not found")
+                raise ValueError(f"Subsidiary {sub} not found")
 
             mapped_subsidiaries.append(
                 {
