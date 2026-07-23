@@ -76,6 +76,15 @@ class AirbaseSink(HotglueSink):
                     ),
                     None
                 )
+            if sub.get("erp_reference_id"):
+                subsidiary = next(
+                    (
+                        s
+                        for s in self.subsidiaries
+                        if s.get("erp_reference_id") == sub.get("erp_reference_id")
+                    ),
+                    None
+                )
             if not subsidiary and sub.get("name"):
                 subsidiary = next(
                     (
