@@ -1,9 +1,17 @@
 from hotglue_singer_sdk.target_sdk.client import HotglueSink
 
 
+def get_base_url(config: dict) -> str:
+    if config.get("sandbox") is True:
+        return "https://api-stage.sandbox.airbase.io/v1/accounting"
+    return "https://api.airbase.io/v1/accounting"
+
+
 class AirbaseSink(HotglueSink):
     
-    base_url = "https://api.airbase.io/v1/accounting"
+    @property
+    def base_url(self) -> str:
+        return get_base_url(self.config)
     
     @property
     def name(self) -> str:
