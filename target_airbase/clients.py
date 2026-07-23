@@ -3,7 +3,7 @@ from hotglue_singer_sdk.target_sdk.client import HotglueSink
 
 class AirbaseSink(HotglueSink):
     
-    base_url = "https://api-stage.airbase.io/v1/accounting"
+    base_url = "https://api.airbase.io/v1/accounting"
     
     @property
     def name(self) -> str:
