@@ -67,7 +67,7 @@ class AirbaseSink(HotglueSink):
                     ),
                     None
                 )
-            if sub.get("subsidiaryNumber"):
+            if not subsidiary and sub.get("subsidiaryNumber"):
                 subsidiary = next(
                     (
                         s
