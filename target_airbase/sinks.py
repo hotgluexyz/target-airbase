@@ -96,3 +96,8 @@ class LedgerEntriesSink(AirbaseSink):
 class TagsSink(AirbaseSink):
     name = "Tags"
     endpoint = "/tags/"
+
+    def preprocess_record(self, record: dict, context: dict) -> dict:
+        record = super().preprocess_record(record, context)
+        record["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiary_reference_ids"))
+        return record
