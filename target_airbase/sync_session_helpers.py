@@ -1,13 +1,13 @@
 ENTITY_SYNC_PATH = "/entity/sync/"
 
-from target_airbase.clients import AirbaseSink
+from target_airbase.clients import get_base_url
 import requests
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
-def _entity_sync_url() -> str:
-    return f"{AirbaseSink.base_url.rstrip('/')}{ENTITY_SYNC_PATH}"
+def _entity_sync_url(config: dict) -> str:
+    return f"{get_base_url(config).rstrip('/')}{ENTITY_SYNC_PATH}"
 
 
 def _entity_sync_headers(config: dict) -> dict:
@@ -19,7 +19,7 @@ def _entity_sync_headers(config: dict) -> dict:
 
 def notify_entity_sync_start(config: dict) -> None:
     response = requests.post(
-        _entity_sync_url(),
+        _entity_sync_url(config),
         json={"action": "START"},
         headers=_entity_sync_headers(config),
         timeout=300,
@@ -34,7 +34,7 @@ def notify_entity_sync_start(config: dict) -> None:
 
 def notify_entity_sync_complete(config: dict) -> None:
     response = requests.patch(
-        _entity_sync_url(),
+        _entity_sync_url(config),
         json={"action": "COMPLETE"},
         headers=_entity_sync_headers(config),
         timeout=300,
