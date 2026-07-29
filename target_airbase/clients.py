@@ -3,7 +3,7 @@ from hotglue_singer_sdk.target_sdk.client import HotglueSink
 
 def get_base_url(config: dict) -> str:
     if config.get("sandbox") is True:
-        return "https://api-stage.sandbox.airbase.io/v1/accounting"
+        return "https://api-stage.airbase.io/v1/accounting"
     return "https://api.airbase.io/v1/accounting"
 
 
