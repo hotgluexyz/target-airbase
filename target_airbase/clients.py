@@ -123,10 +123,13 @@ class AirbaseSink(HotglueSink):
 
         for match in matches:
             erp_reference_id = match.get("erp_reference_id")
-            if erp_reference_id.strip():
+            if erp_reference_id and str(erp_reference_id).strip():
                 return erp_reference_id
 
-        return matches[0].get("erp_reference_id")
+        raise ValueError(
+            f"Currency {currency} found on Airbase but has no erp_reference_id. "
+            "This usually means it was auto-created from a transaction. "
+        )
 
     def upsert_record(self, record: dict, context: dict):
         record_id = record.pop("id", None)
