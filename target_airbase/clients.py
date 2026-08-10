@@ -49,7 +49,6 @@ class AirbaseSink(HotglueSink):
             currencies = self.get_data("/currencies/")
             self._target.reference_data["currencies"] = currencies
         return self._target.reference_data["currencies"]
-    
 
     @property
     def vendors(self) -> list[dict]:
@@ -115,14 +114,19 @@ class AirbaseSink(HotglueSink):
         return mapped_subsidiaries
 
     def get_currency(self, currency: str) -> dict:
-        currency = next(
-            (c for c in self.currencies if c.get("iso_code") == currency),
-            None,
-        )
-        if not currency:
+        # Prefer a row with a non-blank erp_reference_id when Airbase has
+        # duplicates (e.g. transaction-created + ETL-created currency). Currencies
+        # created via transactions will have a blank erp_reference_id.
+        matches = [c for c in self.currencies if c.get("iso_code") == currency]
+        if not matches:
             raise ValueError(f"Currency {currency} not found")
 
-        return currency.get("erp_reference_id")
+        for match in matches:
+            erp_reference_id = match.get("erp_reference_id")
+            if erp_reference_id.strip():
+                return erp_reference_id
+
+        return matches[0].get("erp_reference_id")
 
     def upsert_record(self, record: dict, context: dict):
         record_id = record.pop("id", None)
