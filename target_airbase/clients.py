@@ -128,7 +128,7 @@ class AirbaseSink(HotglueSink):
 
         raise ValueError(
             f"Currency {currency} found on Airbase but has no erp_reference_id, "
-            "so we can't create a subsidiary or account that references it. "
+            f"so we can't create {self.name} that reference it. "
             "This usually means it was auto-created from a transaction. "
         )
 
