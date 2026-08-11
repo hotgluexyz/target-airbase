@@ -1,10 +1,10 @@
-from target_airbase.clients import AirbaseSink
+from target_airbase.clients import AirbaseBatchSink, AirbaseSink
 from hotglue_models_accounting.accounting import Account, Vendor, Subsidiary
 
 
-class AccountsSink(AirbaseSink):
+class AccountsSink(AirbaseBatchSink):
     name = "Accounts"
-    endpoint = "/accounts/"
+    endpoint = "/accounts/bulk_upsert/"
     unified_schema = Account
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
@@ -22,9 +22,9 @@ class AccountsSink(AirbaseSink):
         return payload
 
 
-class SuppliersSink(AirbaseSink):
+class SuppliersSink(AirbaseBatchSink):
     name = "Vendors"
-    endpoint = "/vendors/"
+    endpoint = "/vendors/bulk_upsert/"
     unified_schema = Vendor
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
@@ -93,9 +93,9 @@ class LedgerEntriesSink(AirbaseSink):
         return record_id, response.ok, state_updates
 
 
-class TagsSink(AirbaseSink):
+class TagsSink(AirbaseBatchSink):
     name = "Tags"
-    endpoint = "/tags/"
+    endpoint = "/tags/bulk_upsert/"
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         record = super().preprocess_record(record, context)

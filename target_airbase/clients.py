@@ -1,4 +1,6 @@
-from hotglue_singer_sdk.target_sdk.client import HotglueSink
+from copy import deepcopy
+
+from hotglue_singer_sdk.target_sdk.client import HotglueBatchSink, HotglueSink
 
 
 def get_base_url(config: dict) -> str:
@@ -157,3 +159,121 @@ class AirbaseSink(HotglueSink):
     
     def preprocess_record(self, record: dict, context: dict) -> dict:
         return record
+
+
+class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
+    max_size = 100
+
+    @property
+    def current_size(self) -> int:
+        # RecordSink sets current_size=0; the SDK uses this to know when to flush a batch.
+        return self._batch_records_read
+
+    def _build_state(self, entry: dict, success: bool, **extra) -> dict:
+        state = {"success": success, "hash": entry["hash"], **extra}
+        if entry.get("external_id"):
+            state["externalId"] = entry["external_id"]
+        return state
+
+    def process_record(self, record: dict, context: dict) -> None:
+        if not self.latest_state:
+            self.init_state()
+
+        external_id_key = self._target.EXTERNAL_ID_KEY
+        external_id = None
+
+        try:
+            if self.name not in self.allows_externalid and record.get(external_id_key):
+                external_id = record.pop(external_id_key, None)
+            record = self.preprocess_record(record, context)
+        except Exception as e:
+            self.logger.exception(f"Preprocess record error {str(e)}")
+            state = {"success": False, "error": str(e), **self._get_error_classification_metadata(e)}
+            if external_id:
+                state["externalId"] = external_id
+            self.update_state(state)
+            return
+
+        record_hash = self.build_record_hash(record)
+        if record_hash in self.processed_hashes:
+            self.logger.info(f"Record of type {self.name} already exists with hash: {record_hash}")
+            return
+
+        existing_state = self.get_existing_state(record_hash)
+        if self.name in self.allows_externalid:
+            external_id = record.get(external_id_key)
+        else:
+            external_id = record.pop(external_id_key, None)
+
+        if existing_state:
+            self.update_state(existing_state, is_duplicate=True, record=record)
+            return
+
+        context.setdefault("records", []).append({
+            "payload": record,
+            "hash": record_hash,
+            "external_id": external_id,
+            "is_update": bool(record.get("id")),
+        })
+
+    def process_batch_record(self, staging_entry: dict, index: int) -> dict:
+        payload = deepcopy(staging_entry["payload"])
+        airbase_id = payload.pop("id", None)
+        if airbase_id:
+            payload["airbase_id"] = airbase_id
+        return payload
+
+    def make_batch_request(self, records: list[dict]):
+        return self.request_api("POST", self.endpoint, request_data={"entities": records})
+
+    def _failed_states(self, staging: list[dict], body: dict) -> list[dict]:
+        errors_by_index = {
+            item["index"]: item
+            for item in body.get("validation_errors", [])
+            if "index" in item
+        }
+        return [
+            self._build_state(entry, False, error=errors_by_index.get(index, body))
+            for index, entry in enumerate(staging)
+        ]
+
+    def _success_states(self, staging: list[dict], body: dict) -> list[dict]:
+        entities = body.get("entities") or body.get("data", [])
+        states = []
+        for index, entry in enumerate(staging):
+            extra = {}
+            if index < len(entities):
+                record_id = entities[index].get("airbase_id") or entities[index].get("id")
+                if record_id:
+                    extra["id"] = record_id
+            if entry.get("is_update"):
+                extra["is_updated"] = True
+            states.append(self._build_state(entry, True, **extra))
+        return states
+
+    def handle_batch_response(self, response, staging: list[dict]) -> dict:
+        body = response.json()
+        if not response.ok:
+            return {"state_updates": self._failed_states(staging, body)}
+        return {"state_updates": self._success_states(staging, body)}
+
+    def process_batch(self, context: dict) -> None:
+        if not self.latest_state:
+            self.init_state()
+
+        staging = context.get("records", [])
+        if not staging:
+            return
+
+        try:
+            payloads = [self.process_batch_record(entry, i) for i, entry in enumerate(staging)]
+            response = self.make_batch_request(payloads)
+            updates = self.handle_batch_response(response, staging)["state_updates"]
+        except Exception as e:
+            self.logger.exception(f"Bulk upsert error {str(e)}")
+            updates = [self._build_state(entry, False, error=str(e)) for entry in staging]
+
+        for state in updates:
+            if state.get("success"):
+                self.logger.info(f"{self.name} processed id: {state.get('id')}")
+            self.update_state(state)
