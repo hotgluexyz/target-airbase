@@ -213,6 +213,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             self.update_state(existing_state, is_duplicate=True, record=record)
             return
 
+        # Staging records for def process_batch()
         context.setdefault("records", []).append({
             "payload": record,
             "hash": record_hash,
