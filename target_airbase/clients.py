@@ -188,10 +188,14 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             record = self.preprocess_record(record, context)
         except Exception as e:
             self.logger.exception(f"Preprocess record error {str(e)}")
-            state = {"success": False, "error": str(e), **self._get_error_classification_metadata(e)}
-            if external_id:
-                state["externalId"] = external_id
-            self.update_state(state)
+            self.update_state(
+                self._build_record_error_state(
+                    e,
+                    record=record,
+                    external_id=external_id,
+                ),
+                record=record,
+            )
             return
 
         record_hash = self.build_record_hash(record)
@@ -221,6 +225,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         airbase_id = payload.pop("id", None)
         if airbase_id:
             payload["airbase_id"] = airbase_id
+            payload.pop("erp_reference_id", None)
         return payload
 
     def make_batch_request(self, records: list[dict]):
