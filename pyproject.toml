@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "target-airbase"
-version = "1.0.0"
+version = "1.0.4"
 description = "`target-airbase` is a Singer target for airbase, built with the Meltano SDK for Singer Targets."
 authors = ["hotglue"]
 keywords = [
