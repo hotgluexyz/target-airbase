@@ -207,7 +207,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         if self.name in self.allows_externalid:
             external_id = record.get(external_id_key)
         else:
-            external_id = record.pop(external_id_key, None)
+            external_id = external_id or record.pop(external_id_key, None)
 
         if existing_state:
             self.update_state(existing_state, is_duplicate=True, record=record)
