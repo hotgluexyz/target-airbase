@@ -1,5 +1,6 @@
 """airbase target class."""
 
+import os
 from typing import Type
 from hotglue_singer_sdk import typing as th
 from hotglue_singer_sdk.sinks import Sink
@@ -39,13 +40,20 @@ class TargetAirbase(TargetHotglue):
         TagsSink,
     ]
 
+    @property
+    def is_real_time(self) -> bool:
+        # Real-time jobs run in Lambda; batch jobs run on ECS Fargate.
+        return bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
     def listen(self, file_input=None):
-        notify_entity_sync_start(dict(self.config))
+        if not self.is_real_time:
+            notify_entity_sync_start(dict(self.config))
         super().listen(file_input)
 
     def _process_endofpipe(self) -> None:
         super()._process_endofpipe()
-        notify_entity_sync_complete(dict(self.config))
+        if not self.is_real_time:
+            notify_entity_sync_complete(dict(self.config))
 
 
 if __name__ == "__main__":
