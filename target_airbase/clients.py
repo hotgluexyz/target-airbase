@@ -225,17 +225,38 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         airbase_id = payload.pop("id", None)
         if airbase_id:
             payload["airbase_id"] = airbase_id
-            payload.pop("erp_reference_id", None)
         return payload
 
     def make_batch_request(self, records: list[dict]):
         return self.request_api("POST", self.endpoint, request_data={"entities": records})
 
+    def _bulk_response_entities(self, body: dict) -> list[dict]:
+        entities = (body.get("created") or []) + (body.get("updated") or [])
+        if not entities:
+            entities = body.get("entities") or body.get("data") or []
+        return entities
+
+    def _match_bulk_response_entity(
+        self, payload: dict, entities: list[dict]
+    ) -> dict | None:
+        airbase_id = payload.get("airbase_id") or payload.get("id")
+        erp_reference_id = payload.get("erp_reference_id")
+
+        for entity in entities:
+            entity_id = entity.get("airbase_id") or entity.get("id")
+            if airbase_id and entity_id == airbase_id:
+                return entity
+            if (
+                erp_reference_id
+                and entity.get("erp_reference_id") == erp_reference_id
+            ):
+                return entity
+        return None
+
     def _failed_states(self, staging: list[dict], body: dict) -> list[dict]:
         errors_by_index = {
             item["index"]: item
             for item in body.get("validation_errors", [])
-            if "index" in item
         }
         return [
             self._build_state(entry, False, error=errors_by_index.get(index, body))
@@ -243,17 +264,22 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         ]
 
     def _success_states(self, staging: list[dict], body: dict) -> list[dict]:
-        entities = body.get("entities") or body.get("data", [])
+        entities = self._bulk_response_entities(body)
         states = []
-        for index, entry in enumerate(staging):
+        for entry in staging:
             extra = {}
-            if index < len(entities):
-                record_id = entities[index].get("airbase_id") or entities[index].get("id")
-                if record_id:
-                    extra["id"] = record_id
-            if entry.get("is_update"):
+            entity = self._match_bulk_response_entity(entry["payload"], entities)
+            record_id = None
+            if entity:
+                record_id = entity.get("airbase_id") or entity.get("id")
+            success = bool(record_id)
+            if record_id:
+                extra["id"] = record_id
+            if entry.get("is_update") and success:
                 extra["is_updated"] = True
-            states.append(self._build_state(entry, True, **extra))
+            if not success:
+                extra["error"] = "No Airbase id in bulk response"
+            states.append(self._build_state(entry, success, **extra))
         return states
 
     def handle_batch_response(self, response, staging: list[dict]) -> dict:
