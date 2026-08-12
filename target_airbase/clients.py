@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+from hotglue_singer_sdk.sinks.batch import BatchSink
 from hotglue_singer_sdk.target_sdk.client import HotglueBatchSink, HotglueSink
 
 
@@ -162,6 +163,7 @@ class AirbaseSink(HotglueSink):
 
 
 class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
+    process_record = BatchSink.process_record
     max_size = 100
 
     @property
@@ -175,54 +177,8 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             state["externalId"] = entry["external_id"]
         return state
 
-    def process_record(self, record: dict, context: dict) -> None:
-        if not self.latest_state:
-            self.init_state()
-
-        external_id_key = self._target.EXTERNAL_ID_KEY
-        external_id = None
-
-        try:
-            if self.name not in self.allows_externalid and record.get(external_id_key):
-                external_id = record.pop(external_id_key, None)
-            record = self.preprocess_record(record, context)
-        except Exception as e:
-            self.logger.exception(f"Preprocess record error {str(e)}")
-            self.update_state(
-                self._build_record_error_state(
-                    e,
-                    record=record,
-                    external_id=external_id,
-                ),
-                record=record,
-            )
-            return
-
-        record_hash = self.build_record_hash(record)
-        if record_hash in self.processed_hashes:
-            self.logger.info(f"Record of type {self.name} already exists with hash: {record_hash}")
-            return
-
-        existing_state = self.get_existing_state(record_hash)
-        if self.name in self.allows_externalid:
-            external_id = record.get(external_id_key)
-        else:
-            external_id = external_id or record.pop(external_id_key, None)
-
-        if existing_state:
-            self.update_state(existing_state, is_duplicate=True, record=record)
-            return
-
-        # Staging records for def process_batch()
-        context.setdefault("records", []).append({
-            "payload": record,
-            "hash": record_hash,
-            "external_id": external_id,
-            "is_update": bool(record.get("id")),
-        })
-
-    def process_batch_record(self, staging_entry: dict, index: int) -> dict:
-        payload = deepcopy(staging_entry["payload"])
+    def process_batch_record(self, record: dict, index: int) -> dict:
+        payload = deepcopy(record)
         airbase_id = payload.pop("id", None)
         if airbase_id:
             payload["airbase_id"] = airbase_id
@@ -231,15 +187,10 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
     def make_batch_request(self, records: list[dict]):
         return self.request_api("POST", self.endpoint, request_data={"entities": records})
 
-    def _bulk_response_entities(self, body: dict) -> list[dict]:
-        entities = (body.get("created") or []) + (body.get("updated") or [])
-        if not entities:
-            entities = body.get("entities") or body.get("data") or []
-        return entities
-
-    def _match_bulk_response_entity(
-        self, payload: dict, entities: list[dict]
-    ) -> dict | None:
+    def _match_bulk_response_entity(self, payload: dict, entities: list[dict]) -> dict | None:
+        """
+        Match a payload to an entity in the bulk API response.
+        """
         airbase_id = payload.get("airbase_id") or payload.get("id")
         erp_reference_id = payload.get("erp_reference_id")
 
@@ -247,10 +198,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             entity_id = entity.get("airbase_id") or entity.get("id")
             if airbase_id and entity_id == airbase_id:
                 return entity
-            if (
-                erp_reference_id
-                and entity.get("erp_reference_id") == erp_reference_id
-            ):
+            if erp_reference_id and entity.get("erp_reference_id") == erp_reference_id:
                 return entity
         return None
 
@@ -265,18 +213,27 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         ]
 
     def _success_states(self, staging: list[dict], body: dict) -> list[dict]:
-        entities = self._bulk_response_entities(body)
+        created = body.get("created") or []
+        updated = body.get("updated") or []
+        fallback_entities = body.get("entities") or body.get("data") or []
+
         states = []
         for entry in staging:
+            entity = self._match_bulk_response_entity(entry["payload"], updated)
+            is_updated = entity is not None
+            if not entity:
+                entity = self._match_bulk_response_entity(entry["payload"], created)
+            if not entity and fallback_entities:
+                entity = self._match_bulk_response_entity(entry["payload"], fallback_entities)
+
             extra = {}
-            entity = self._match_bulk_response_entity(entry["payload"], entities)
             record_id = None
             if entity:
                 record_id = entity.get("airbase_id") or entity.get("id")
             success = bool(record_id)
             if record_id:
                 extra["id"] = record_id
-            if entry.get("is_update") and success:
+            if is_updated and success:
                 extra["is_updated"] = True
             if not success:
                 extra["error"] = "No Airbase id in bulk response"
@@ -293,12 +250,53 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         if not self.latest_state:
             self.init_state()
 
-        staging = context.get("records", [])
+        staging = []
+        external_id_key = self._target.EXTERNAL_ID_KEY
+
+        for raw_record in context.get("records", []):
+            external_id = None
+            try:
+                if self.name not in self.allows_externalid and raw_record.get(external_id_key):
+                    external_id = raw_record.pop(external_id_key, None)
+                record = self.preprocess_record(raw_record, context)
+            except Exception as e:
+                self.logger.exception(f"Preprocess record error {str(e)}")
+                self.update_state(
+                    self._build_record_error_state(
+                        e,
+                        record=raw_record,
+                        external_id=external_id,
+                    ),
+                    record=raw_record,
+                )
+                continue
+
+            record_hash = self.build_record_hash(record)
+            if record_hash in self.processed_hashes:
+                self.logger.info(f"Record of type {self.name} already exists with hash: {record_hash}")
+                continue
+
+            existing_state = self.get_existing_state(record_hash)
+            if self.name in self.allows_externalid:
+                external_id = record.get(external_id_key)
+            else:
+                external_id = external_id or record.pop(external_id_key, None)
+
+            if existing_state:
+                self.update_state(existing_state, is_duplicate=True, record=record)
+                continue
+
+            staging.append({
+                "payload": record,
+                "hash": record_hash,
+                "external_id": external_id,
+            })
+
         if not staging:
             return
 
         try:
-            payloads = [self.process_batch_record(entry, i) for i, entry in enumerate(staging)]
+            payloads = [self.process_batch_record(entry["payload"], i) for i, entry in enumerate(staging)]
             response = self.make_batch_request(payloads)
             updates = self.handle_batch_response(response, staging)["state_updates"]
         except Exception as e:
