@@ -222,7 +222,6 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
     def _success_states(self, staging: list[dict], body: dict) -> list[dict]:
         created = body.get("created") or []
         updated = body.get("updated") or []
-        fallback_entities = body.get("entities") or body.get("data") or []
 
         states = []
         for entry in staging:
@@ -230,8 +229,6 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             is_updated = entity is not None
             if not entity:
                 entity = self._match_bulk_response_entity(entry["payload"], created)
-            if not entity and fallback_entities:
-                entity = self._match_bulk_response_entity(entry["payload"], fallback_entities)
 
             extra = {}
             record_id = None
