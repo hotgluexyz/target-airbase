@@ -253,11 +253,32 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             return {"state_updates": self._failed_states(staging, body)}
         return {"state_updates": self._success_states(staging, body)}
 
+    def _update_batch_duplicates(
+        self,
+        batch_duplicates: list[dict],
+        updates: list[dict],
+    ) -> None:
+        for dup in batch_duplicates:
+            existing = next(
+                (s for s in updates if s.get("hash") == dup["hash"] and s.get("success")),
+                None,
+            ) or self.get_existing_state(dup["hash"])
+            if existing:
+                self.update_state(existing, is_duplicate=True, record=dup["record"])
+                continue
+
+            self.logger.info(
+                f"Skipping duplicate record of type {self.name} in batch "
+                f"(first attempt did not succeed): {dup['hash']}"
+            )
+
     def process_batch(self, context: dict) -> None:
         if not self.latest_state:
             self.init_state()
 
         staging = []
+        batch_duplicates = []
+        seen_in_batch: set[str] = set()
         external_id_key = self._target.EXTERNAL_ID_KEY
 
         for index, raw_record in enumerate(context.get("records", [])):
@@ -297,6 +318,14 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
                 )
                 continue
 
+            if record_hash in seen_in_batch:
+                batch_duplicates.append({
+                    "hash": record_hash,
+                    "record": self._record_for_hash(payload),
+                })
+                continue
+
+            seen_in_batch.add(record_hash)
             staging.append({
                 "payload": payload,
                 "hash": record_hash,
@@ -318,3 +347,5 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             if state.get("success"):
                 self.logger.info(f"{self.name} processed id: {state.get('id')}")
             self.update_state(state)
+
+        self._update_batch_duplicates(batch_duplicates, updates)
