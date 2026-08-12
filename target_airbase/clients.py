@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from copy import deepcopy
 
 from hotglue_singer_sdk.sinks.batch import BatchSink
