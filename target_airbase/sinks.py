@@ -7,19 +7,18 @@ class AccountsSink(AirbaseBatchSink):
     endpoint = "/accounts/bulk_upsert/"
     unified_schema = Account
 
-    def preprocess_record(self, record: dict, context: dict) -> dict:
+    def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
             "id": record.get("id"),
             "name": record.get("name"),
             "erp_reference_id": record.get("accountNumber"),
             "type": record.get("type"),
             "category": record.get("category") or "",
-            "account_number": record.get("accountNumber")
+            "account_number": record.get("accountNumber"),
         }
         payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
         payload["erp_currency_reference_id"] = self.get_currency(record.get("currency"))
-
-        return payload
+        return super().process_batch_record(payload, index)
 
 
 class SuppliersSink(AirbaseBatchSink):
@@ -27,21 +26,28 @@ class SuppliersSink(AirbaseBatchSink):
     endpoint = "/vendors/bulk_upsert/"
     unified_schema = Vendor
 
-    def preprocess_record(self, record: dict, context: dict) -> dict:
+    def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
             "name": record.get("vendorName"),
             "erp_reference_id": record.get("vendorNumber"),
             "id": record.get("id"),
         }
 
-        # lookup by erp_reference_id and name
         if not payload["id"]:
-            vendor = next((v for v in self.vendors if v.get("erp_reference_id") == record.get("vendorNumber") and v.get("name") == record.get("vendorName")), None)
+            vendor = next(
+                (
+                    v
+                    for v in self.vendors
+                    if v.get("erp_reference_id") == record.get("vendorNumber")
+                    and v.get("name") == record.get("vendorName")
+                ),
+                None,
+            )
             if vendor:
                 payload["id"] = vendor.get("airbase_id")
 
         payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
-        return payload
+        return super().process_batch_record(payload, index)
 
 
 class SubsidiariesSink(AirbaseSink):
@@ -83,12 +89,12 @@ class LedgerEntriesSink(AirbaseSink):
 
         if not record_id:
             raise ValueError("Record ID is required to update a bill")
-        
+
         response = self.request_api("GET", f"{self.endpoint}{record_id}/")
         res_json = response.json()
         if res_json.get("status") == "sync_complete":
             return record_id, True, {"existing": True}
-        
+
         response = self.request_api("PATCH", f"{self.endpoint}{record_id}/", request_data=record)
         return record_id, response.ok, state_updates
 
@@ -97,7 +103,7 @@ class TagsSink(AirbaseBatchSink):
     name = "Tags"
     endpoint = "/tags/bulk_upsert/"
 
-    def preprocess_record(self, record: dict, context: dict) -> dict:
-        record = super().preprocess_record(record, context)
-        record["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiary_reference_ids"))
-        return record
+    def process_batch_record(self, record: dict, index: int) -> dict:
+        payload = dict(record)
+        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiary_reference_ids"))
+        return super().process_batch_record(payload, index)

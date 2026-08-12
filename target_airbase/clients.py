@@ -177,6 +177,13 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             state["externalId"] = entry["external_id"]
         return state
 
+    def _record_for_hash(self, payload: dict) -> dict:
+        record = deepcopy(payload)
+        airbase_id = record.pop("airbase_id", None)
+        if airbase_id is not None:
+            return {"id": airbase_id, **record}
+        return record
+
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload = deepcopy(record)
         airbase_id = payload.pop("id", None)
@@ -253,14 +260,14 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         staging = []
         external_id_key = self._target.EXTERNAL_ID_KEY
 
-        for raw_record in context.get("records", []):
+        for index, raw_record in enumerate(context.get("records", [])):
             external_id = None
             try:
                 if self.name not in self.allows_externalid and raw_record.get(external_id_key):
                     external_id = raw_record.pop(external_id_key, None)
-                record = self.preprocess_record(raw_record, context)
+                payload = self.process_batch_record(raw_record, index)
             except Exception as e:
-                self.logger.exception(f"Preprocess record error {str(e)}")
+                self.logger.exception(f"Batch record error {str(e)}")
                 self.update_state(
                     self._build_record_error_state(
                         e,
@@ -271,23 +278,27 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
                 )
                 continue
 
-            record_hash = self.build_record_hash(record)
+            record_hash = self.build_record_hash(self._record_for_hash(payload))
             if record_hash in self.processed_hashes:
                 self.logger.info(f"Record of type {self.name} already exists with hash: {record_hash}")
                 continue
 
             existing_state = self.get_existing_state(record_hash)
             if self.name in self.allows_externalid:
-                external_id = record.get(external_id_key)
+                external_id = raw_record.get(external_id_key)
             else:
-                external_id = external_id or record.pop(external_id_key, None)
+                external_id = external_id or raw_record.pop(external_id_key, None)
 
             if existing_state:
-                self.update_state(existing_state, is_duplicate=True, record=record)
+                self.update_state(
+                    existing_state,
+                    is_duplicate=True,
+                    record=self._record_for_hash(payload),
+                )
                 continue
 
             staging.append({
-                "payload": record,
+                "payload": payload,
                 "hash": record_hash,
                 "external_id": external_id,
             })
@@ -296,7 +307,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             return
 
         try:
-            payloads = [self.process_batch_record(entry["payload"], i) for i, entry in enumerate(staging)]
+            payloads = [entry["payload"] for entry in staging]
             response = self.make_batch_request(payloads)
             updates = self.handle_batch_response(response, staging)["state_updates"]
         except Exception as e:
