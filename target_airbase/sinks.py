@@ -57,7 +57,7 @@ class SubsidiariesSink(AirbaseSink):
 
     def preprocess_record(self, record: dict, context: dict) -> dict:
         payload: dict = {
-            "erp_reference_id": record.get("erp_reference_id"),
+            "erp_reference_id": record.get("subsidiaryNumber"),
             "name": record.get("name"),
             "id": record.get("id"),
         }
