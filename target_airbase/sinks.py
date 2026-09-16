@@ -90,10 +90,8 @@ class LedgerEntriesSink(AirbaseSink):
         if not record_id:
             raise ValueError("Record ID is required to update a bill")
 
-        response = self.request_api("GET", f"{self.endpoint}{record_id}/")
-        res_json = response.json()
-        if res_json.get("status") == "sync_complete":
-            return record_id, True, {"existing": True}
+        if record.get("status") == "sync_complete":
+            record["error_message"] = None
 
         response = self.request_api("PATCH", f"{self.endpoint}{record_id}/", request_data=record)
         return record_id, response.ok, state_updates
