@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import requests
+from hotglue_etl_exceptions import InvalidCredentialsError, InvalidPayloadError
 from hotglue_singer_sdk.sinks.batch import BatchSink
 from hotglue_singer_sdk.target_sdk.client import HotglueBatchSink, HotglueSink
 
@@ -28,6 +30,13 @@ class AirbaseSink(HotglueSink):
             "Authorization": f"Token {self.config.get('api_key')}",
             "Content-Type": "application/json",
         }
+
+    def validate_response(self, response: requests.Response) -> None:
+        if response.status_code in (401, 403):
+            raise InvalidCredentialsError(response.text or response.reason)
+        if response.status_code in (400, 422):
+            raise InvalidPayloadError(response.text or response.reason)
+        super().validate_response(response)
 
     def get_data(self, endpoint: str) -> list[dict]:
         params = {"page": 1, "page_size": 250}
@@ -108,7 +117,7 @@ class AirbaseSink(HotglueSink):
                 )
 
             if not subsidiary:
-                raise ValueError(f"Subsidiary {sub} not found")
+                raise InvalidPayloadError(f"Subsidiary {sub} not found")
 
             mapped_subsidiaries.append(
                 {
@@ -124,14 +133,14 @@ class AirbaseSink(HotglueSink):
         # created via transactions will have a blank erp_reference_id.
         matches = [c for c in self.currencies if c.get("iso_code") == currency]
         if not matches:
-            raise ValueError(f"Currency {currency} not found")
+            raise InvalidPayloadError(f"Currency {currency} not found")
 
         for match in matches:
             erp_reference_id = match.get("erp_reference_id")
             if erp_reference_id and str(erp_reference_id).strip():
                 return erp_reference_id
 
-        raise ValueError(
+        raise InvalidPayloadError(
             f"Currency {currency} found on Airbase but has no erp_reference_id, "
             f"so we can't create {self.name} that reference it. "
             "This usually means it was auto-created from a transaction. "
@@ -340,7 +349,8 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             updates = self.handle_batch_response(response, staging)["state_updates"]
         except Exception as e:
             self.logger.exception(f"Bulk upsert error {str(e)}")
-            updates = [self._build_state(entry, False, error=str(e)) for entry in staging]
+            metadata = self._get_error_classification_metadata(e)
+            updates = [self._build_state(entry, False, error=str(e), **metadata) for entry in staging]
 
         for state in updates:
             if state.get("success"):
