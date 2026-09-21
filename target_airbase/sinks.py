@@ -1,3 +1,4 @@
+from hotglue_etl_exceptions import InvalidPayloadError
 from target_airbase.clients import AirbaseBatchSink, AirbaseSink
 from hotglue_models_accounting.accounting import Account, Vendor, Subsidiary
 
@@ -65,7 +66,7 @@ class SubsidiariesSink(AirbaseSink):
         country = record.get("addresses")[0].get("country") if record.get("addresses") else None
 
         if not country:
-            raise ValueError(f"Country is required for subsidiary '{record.get('subsidiaryNumber')}'")
+            raise InvalidPayloadError(f"Country is required for subsidiary '{record.get('subsidiaryNumber')}'")
 
         payload["iso_code"] = country
 
@@ -88,12 +89,10 @@ class LedgerEntriesSink(AirbaseSink):
         record_id = record.pop("id", None)
 
         if not record_id:
-            raise ValueError("Record ID is required to update a bill")
+            raise InvalidPayloadError("Record ID is required to update a bill")
 
-        response = self.request_api("GET", f"{self.endpoint}{record_id}/")
-        res_json = response.json()
-        if res_json.get("status") == "sync_complete":
-            return record_id, True, {"existing": True}
+        if record.get("status") == "sync_complete":
+            record["error_message"] = None
 
         response = self.request_api("PATCH", f"{self.endpoint}{record_id}/", request_data=record)
         return record_id, response.ok, state_updates

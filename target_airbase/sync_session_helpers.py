@@ -3,6 +3,7 @@ import backoff
 import logging
 import requests
 
+from hotglue_etl_exceptions import InvalidCredentialsError
 from hotglue_singer_sdk.exceptions import RetriableAPIError
 
 ENTITY_SYNC_PATH = "/entity/sync/"
@@ -48,6 +49,8 @@ def _entity_sync_request(method: str, config: dict, payload: dict) -> requests.R
             f"{response.status_code} Client Error: {response.reason} for url: {response.url}",
             response,
         )
+    if response.status_code in (401, 403):
+        raise InvalidCredentialsError(response.text or response.reason)
     return response
 
 
