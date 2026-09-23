@@ -32,6 +32,8 @@ class AirbaseSink(HotglueSink):
         }
 
     def validate_response(self, response: requests.Response) -> None:
+        if response.status_code >= 400:
+            self.logger.warning("Airbase request returned HTTP status %s", response.status_code)
         if response.status_code in (401, 403):
             raise InvalidCredentialsError(response.text or response.reason)
         if response.status_code in (400, 422):
