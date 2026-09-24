@@ -20,6 +20,18 @@ class ValidateResponseTest(unittest.TestCase):
             "Airbase request returned HTTP status %s", 400
         )
 
+    def test_classifies_not_found_as_invalid_payload(self):
+        sink = object.__new__(AirbaseSink)
+        sink.logger = Mock()
+        response = Mock(status_code=404, text="Entity not found", reason="Not Found")
+
+        with self.assertRaises(InvalidPayloadError):
+            sink.validate_response(response)
+
+        sink.logger.warning.assert_called_once_with(
+            "Airbase request returned HTTP status %s", 404
+        )
+
     def test_logs_http_status_for_server_errors(self):
         sink = object.__new__(AirbaseSink)
         sink.logger = Mock()

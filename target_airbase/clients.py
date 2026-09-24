@@ -36,7 +36,7 @@ class AirbaseSink(HotglueSink):
             self.logger.warning("Airbase request returned HTTP status %s", response.status_code)
         if response.status_code in (401, 403):
             raise InvalidCredentialsError(response.text or response.reason)
-        if response.status_code in (400, 422):
+        if response.status_code in (400, 404, 422):
             raise InvalidPayloadError(response.text or response.reason)
         super().validate_response(response)
 
