@@ -1,5 +1,3 @@
-ENTITY_SYNC_PATH = "/entity/sync/"
-
 from target_airbase.clients import get_base_url
 import backoff
 import logging
@@ -8,6 +6,7 @@ import requests
 from hotglue_etl_exceptions import InvalidCredentialsError
 from hotglue_singer_sdk.exceptions import RetriableAPIError
 
+ENTITY_SYNC_PATH = "/entity/sync/"
 LOGGER = logging.getLogger(__name__)
 
 

@@ -1,9 +1,7 @@
 """airbase target class."""
 
 import os
-from typing import Type
 from hotglue_singer_sdk import typing as th
-from hotglue_singer_sdk.sinks import Sink
 from hotglue_singer_sdk.helpers.capabilities import AlertingLevel
 from hotglue_singer_sdk.target_sdk.target import TargetHotglue
 
