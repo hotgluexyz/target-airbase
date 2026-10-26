@@ -200,6 +200,9 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         return record
 
     def _batch_field_is_missing(self, value) -> bool:
+        """
+        Check if a value is missing or empty.
+        """
         if value is None:
             return True
         if isinstance(value, str) and not value.strip():
@@ -209,6 +212,9 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
         return False
 
     def validate_batch_payload(self, payload: dict) -> None:
+        """
+        Validate required fields for the batch record for create or update.
+        """
         is_update = bool(payload.get("airbase_id"))
         required_fields = (
             self.batch_required_update_fields
