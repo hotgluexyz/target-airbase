@@ -30,8 +30,12 @@ class AccountsSink(AirbaseBatchSink):
             "category": record.get("category") or "",
             "account_number": record.get("accountNumber"),
         }
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
-        payload["erp_currency_reference_id"] = self.get_currency(record.get("currency"))
+        subsidiary_ref = record.get("subsidiaryRef")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
+        currency = record.get("currency")
+        if currency:
+            payload["erp_currency_reference_id"] = self.get_currency(currency)
         return super().process_batch_record(payload, index)
 
 
@@ -62,7 +66,9 @@ class SuppliersSink(AirbaseBatchSink):
             if vendor:
                 payload["id"] = vendor.get("airbase_id")
 
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
+        subsidiary_ref = record.get("subsidiaryRef")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
         return super().process_batch_record(payload, index)
 
 
@@ -121,5 +127,7 @@ class TagsSink(AirbaseBatchSink):
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload = dict(record)
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiary_reference_ids"))
+        subsidiary_ref = record.get("subsidiary_reference_ids")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
         return super().process_batch_record(payload, index)
