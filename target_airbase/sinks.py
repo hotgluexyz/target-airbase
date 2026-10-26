@@ -7,6 +7,19 @@ class AccountsSink(AirbaseBatchSink):
     name = "Accounts"
     endpoint = "/accounts/bulk_upsert/"
     unified_schema = Account
+    batch_required_create_fields = (
+        "name",
+        "erp_reference_id",
+        "account_number",
+        "type",
+        "subsidiary_reference_ids",
+    )
+    batch_required_update_fields = (
+        "name",
+        "erp_reference_id",
+        "account_number",
+        "type",
+    )
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
@@ -26,6 +39,8 @@ class SuppliersSink(AirbaseBatchSink):
     name = "Vendors"
     endpoint = "/vendors/bulk_upsert/"
     unified_schema = Vendor
+    batch_required_create_fields = ("name", "erp_reference_id", "subsidiary_reference_ids")
+    batch_required_update_fields = ("name", "erp_reference_id")
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
@@ -101,6 +116,8 @@ class LedgerEntriesSink(AirbaseSink):
 class TagsSink(AirbaseBatchSink):
     name = "Tags"
     endpoint = "/tags/bulk_upsert/"
+    batch_required_create_fields = ("name", "erp_reference_id", "type_label", "subsidiary_reference_ids")
+    batch_required_update_fields = ("name", "erp_reference_id", "type_label")
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload = dict(record)

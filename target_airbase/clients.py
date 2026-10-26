@@ -178,6 +178,8 @@ class AirbaseSink(HotglueSink):
 class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
     process_record = BatchSink.process_record
     max_size = 100
+    batch_required_create_fields: tuple[str, ...] = ()
+    batch_required_update_fields: tuple[str, ...] = ()
 
     @property
     def current_size(self) -> int:
@@ -197,11 +199,34 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             return {"id": airbase_id, **record}
         return record
 
+    def _batch_field_is_missing(self, value) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str) and not value.strip():
+            return True
+        if isinstance(value, (list, tuple)) and len(value) == 0:
+            return True
+        return False
+
+    def validate_batch_payload(self, payload: dict) -> None:
+        is_update = bool(payload.get("airbase_id"))
+        required_fields = (
+            self.batch_required_update_fields
+            if is_update
+            else self.batch_required_create_fields
+        )
+        for field in required_fields:
+            if self._batch_field_is_missing(payload.get(field)):
+                raise ValueError(
+                    f"Field '{field}' was not provided or is empty. This field is required."
+                )
+
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload = deepcopy(record)
         airbase_id = payload.pop("id", None)
         if airbase_id:
             payload["airbase_id"] = airbase_id
+        self.validate_batch_payload(payload)
         return payload
 
     def make_batch_request(self, records: list[dict]):
