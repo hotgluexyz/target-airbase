@@ -7,6 +7,19 @@ class AccountsSink(AirbaseBatchSink):
     name = "Accounts"
     endpoint = "/accounts/bulk_upsert/"
     unified_schema = Account
+    batch_required_create_fields = (
+        "name",
+        "erp_reference_id",
+        "account_number",
+        "type",
+        "subsidiary_reference_ids",
+    )
+    batch_required_update_fields = (
+        "name",
+        "erp_reference_id",
+        "account_number",
+        "type",
+    )
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
@@ -17,8 +30,12 @@ class AccountsSink(AirbaseBatchSink):
             "category": record.get("category") or "",
             "account_number": record.get("accountNumber"),
         }
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
-        payload["erp_currency_reference_id"] = self.get_currency(record.get("currency"))
+        subsidiary_ref = record.get("subsidiaryRef")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
+        currency = record.get("currency")
+        if currency:
+            payload["erp_currency_reference_id"] = self.get_currency(currency)
         return super().process_batch_record(payload, index)
 
 
@@ -26,6 +43,8 @@ class SuppliersSink(AirbaseBatchSink):
     name = "Vendors"
     endpoint = "/vendors/bulk_upsert/"
     unified_schema = Vendor
+    batch_required_create_fields = ("name", "erp_reference_id", "subsidiary_reference_ids")
+    batch_required_update_fields = ("name", "erp_reference_id")
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload: dict = {
@@ -47,7 +66,9 @@ class SuppliersSink(AirbaseBatchSink):
             if vendor:
                 payload["id"] = vendor.get("airbase_id")
 
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiaryRef"))
+        subsidiary_ref = record.get("subsidiaryRef")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
         return super().process_batch_record(payload, index)
 
 
@@ -101,8 +122,12 @@ class LedgerEntriesSink(AirbaseSink):
 class TagsSink(AirbaseBatchSink):
     name = "Tags"
     endpoint = "/tags/bulk_upsert/"
+    batch_required_create_fields = ("name", "erp_reference_id", "type_label", "subsidiary_reference_ids")
+    batch_required_update_fields = ("name", "erp_reference_id", "type_label")
 
     def process_batch_record(self, record: dict, index: int) -> dict:
         payload = dict(record)
-        payload["subsidiary_reference_ids"] = self.get_subsidiary(record.get("subsidiary_reference_ids"))
+        subsidiary_ref = record.get("subsidiary_reference_ids")
+        if subsidiary_ref:
+            payload["subsidiary_reference_ids"] = self.get_subsidiary(subsidiary_ref)
         return super().process_batch_record(payload, index)
