@@ -151,6 +151,8 @@ class AirbaseSink(HotglueSink):
     def upsert_record(self, record: dict, context: dict):
         record_id = record.pop("id", None)
         is_update = record_id is not None
+        erp_reference_id = record.get("erp_reference_id")
+        acct_type = record.get("type")
 
         endpoint = self.endpoint
         method = "POST"
@@ -168,6 +170,21 @@ class AirbaseSink(HotglueSink):
         state_updates = {}
         if is_update and response.ok:
             state_updates = {"is_updated": True}
+            self.logger.info(
+                "%s updated id=%s erp_reference_id=%s type=%s",
+                self.name,
+                id or record_id,
+                erp_reference_id,
+                acct_type,
+            )
+        elif response.ok:
+            self.logger.info(
+                "%s created id=%s erp_reference_id=%s type=%s",
+                self.name,
+                id,
+                erp_reference_id,
+                acct_type,
+            )
 
         return id, response.ok, state_updates
     
@@ -263,16 +280,65 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
             for index, entry in enumerate(staging)
         ]
 
+    def _log_bulk_result(
+        self,
+        *,
+        is_updated: bool,
+        success: bool,
+        record_id: str | None,
+        sent_id: str | None,
+        payload: dict,
+    ) -> None:
+        erp = payload.get("erp_reference_id")
+        acct_type = payload.get("type")
+        if not success:
+            self.logger.warning(
+                "%s failed erp_reference_id=%s type=%s sent_airbase_id=%s",
+                self.name,
+                erp,
+                acct_type,
+                sent_id,
+            )
+            return
+        if is_updated:
+            self.logger.info(
+                "%s updated id=%s erp_reference_id=%s type=%s",
+                self.name,
+                record_id,
+                erp,
+                acct_type,
+            )
+            return
+        if sent_id and record_id and sent_id != record_id:
+            self.logger.warning(
+                "%s created new id=%s (sent airbase_id=%s) erp_reference_id=%s type=%s",
+                self.name,
+                record_id,
+                sent_id,
+                erp,
+                acct_type,
+            )
+            return
+        self.logger.info(
+            "%s created id=%s erp_reference_id=%s type=%s",
+            self.name,
+            record_id,
+            erp,
+            acct_type,
+        )
+
     def _success_states(self, staging: list[dict], body: dict) -> list[dict]:
         created = body.get("created") or []
         updated = body.get("updated") or []
 
         states = []
         for entry in staging:
-            entity = self._match_bulk_response_entity(entry["payload"], updated)
+            payload = entry["payload"]
+            sent_id = payload.get("airbase_id") or payload.get("id")
+            entity = self._match_bulk_response_entity(payload, updated)
             is_updated = entity is not None
             if not entity:
-                entity = self._match_bulk_response_entity(entry["payload"], created)
+                entity = self._match_bulk_response_entity(payload, created)
 
             extra = {}
             record_id = None
@@ -283,8 +349,17 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
                 extra["id"] = record_id
             if is_updated and success:
                 extra["is_updated"] = True
+            elif success and sent_id and record_id and sent_id != record_id:
+                extra["previous_id"] = sent_id
             if not success:
                 extra["error"] = "No Airbase id in bulk response"
+            self._log_bulk_result(
+                is_updated=is_updated,
+                success=success,
+                record_id=record_id,
+                sent_id=sent_id,
+                payload=payload,
+            )
             states.append(self._build_state(entry, success, **extra))
         return states
 
@@ -313,10 +388,7 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
                 f"(first attempt did not succeed): {dup['hash']}"
             )
 
-    def process_batch(self, context: dict) -> None:
-        if not self.latest_state:
-            self.init_state()
-
+    def _prepare_batch_staging(self, context: dict) -> tuple[list[dict], list[dict]]:
         staging = []
         batch_duplicates = []
         seen_in_batch: set[str] = set()
@@ -373,21 +445,30 @@ class AirbaseBatchSink(HotglueBatchSink, AirbaseSink):
                 "external_id": external_id,
             })
 
-        if not staging:
-            return
+        return staging, batch_duplicates
 
+    def _flush_staging(self, staging: list[dict]) -> list[dict]:
         try:
             payloads = [entry["payload"] for entry in staging]
             response = self.make_batch_request(payloads)
-            updates = self.handle_batch_response(response, staging)["state_updates"]
+            return self.handle_batch_response(response, staging)["state_updates"]
         except Exception as e:
             self.logger.exception(f"Bulk upsert error {str(e)}")
             metadata = self._get_error_classification_metadata(e)
-            updates = [self._build_state(entry, False, error=str(e), **metadata) for entry in staging]
+            return [self._build_state(entry, False, error=str(e), **metadata) for entry in staging]
 
+    def _apply_state_updates(self, updates: list[dict]) -> None:
         for state in updates:
-            if state.get("success"):
-                self.logger.info(f"{self.name} processed id: {state.get('id')}")
             self.update_state(state)
 
+    def process_batch(self, context: dict) -> None:
+        if not self.latest_state:
+            self.init_state()
+
+        staging, batch_duplicates = self._prepare_batch_staging(context)
+        if not staging:
+            return
+
+        updates = self._flush_staging(staging)
+        self._apply_state_updates(updates)
         self._update_batch_duplicates(batch_duplicates, updates)

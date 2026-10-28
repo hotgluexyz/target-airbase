@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from hotglue_etl_exceptions import InvalidPayloadError
 from target_airbase.clients import AirbaseBatchSink, AirbaseSink
 from hotglue_models_accounting.accounting import Account, Vendor, Subsidiary
@@ -6,6 +8,8 @@ from hotglue_models_accounting.accounting import Account, Vendor, Subsidiary
 class AccountsSink(AirbaseBatchSink):
     name = "Accounts"
     endpoint = "/accounts/bulk_upsert/"
+    # bulk_upsert creates a new airbase_id when type changes; PATCH updates type in place.
+    update_endpoint = "/accounts/"
     unified_schema = Account
     batch_required_create_fields = (
         "name",
@@ -37,6 +41,53 @@ class AccountsSink(AirbaseBatchSink):
         if currency:
             payload["erp_currency_reference_id"] = self.get_currency(currency)
         return super().process_batch_record(payload, index)
+
+    def _patch_account_state(self, entry: dict) -> dict:
+        payload = deepcopy(entry["payload"])
+        record_id = payload.pop("airbase_id", None)
+        payload.pop("erp_reference_id", None)
+        try:
+            response = self.request_api(
+                "PATCH",
+                f"{self.update_endpoint}{record_id}/",
+                request_data=payload,
+            )
+            returned_id = response.json().get("airbase_id") or record_id
+            success = response.ok and bool(returned_id)
+            extra = {"id": returned_id} if returned_id else {}
+            if success:
+                extra["is_updated"] = True
+            else:
+                extra["error"] = response.text or response.reason
+            self._log_bulk_result(
+                is_updated=success,
+                success=success,
+                record_id=returned_id,
+                sent_id=record_id,
+                payload=entry["payload"],
+            )
+            return self._build_state(entry, success, **extra)
+        except Exception as e:
+            self.logger.exception("Accounts PATCH error %s", e)
+            metadata = self._get_error_classification_metadata(e)
+            return self._build_state(entry, False, error=str(e), **metadata)
+
+    def _flush_staging(self, staging: list[dict]) -> list[dict]:
+        """
+        Send records to Airbase and return states.
+
+        Creates new accounts and patches updates to existing accounts.
+        """
+        creates = [entry for entry in staging if not entry["payload"].get("airbase_id")]
+        updates = [entry for entry in staging if entry["payload"].get("airbase_id")]
+
+        states: list[dict] = []
+        if creates:
+            states.extend(super()._flush_staging(creates))
+        # Patch updates to existing accounts
+        for entry in updates:
+            states.append(self._patch_account_state(entry))
+        return states
 
 
 class SuppliersSink(AirbaseBatchSink):
